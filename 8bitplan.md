@@ -1,6 +1,6 @@
 # 8-bit mode: plan
 
-Status: plan only, nothing implemented. Written against v1.1.2.
+Status: phase 1 code written (2026-10-16), not yet heard. `playback/RetroAudioProcessor.kt` does section 4 with the starting constants; `RetroAudioProcessorTest` covers bypass, quantise and hold, ramp, flush, formats, and format changes applying only at flush (6 tests, passing). Reviewed the same day against media3 1.11.1: unsupported formats now return `NOT_SET` instead of throwing, rate-dependent values apply in `onFlush`, and the 16-bit round trip is exact. It reaches the player only when `RETRO_LISTEN_TEST` in `PlaybackService.kt` is set to true in a local build, so the shipped app is unchanged. **Next is yours:** build with it on, listen (section 7, phase 1), and decide section 8. Written against v1.1.2.
 
 ## 1. The idea
 
@@ -39,7 +39,8 @@ The numbers above are **starting values to tune by ear**, held as constants in o
 - Wet/dry mix ramped over about 20-30 ms on toggle, so no pop. Fully off = bit-exact bypass.
 
 ### Constraints to respect
-- Handle `ENCODING_PCM_16BIT` and `ENCODING_PCM_FLOAT`; anything else: report the format unhandled so the processor simply does not engage (never crash playback).
+- Handle `ENCODING_PCM_16BIT` and `ENCODING_PCM_FLOAT`; anything else: return `AudioFormat.NOT_SET` from `onConfigure` so the processor simply does not engage. Do not throw `UnhandledAudioFormatException`: `DefaultAudioSink` turns it into a playback error. In practice the sink always hands custom processors 16-bit (with float output on, it skips them entirely).
+- Apply rate-dependent values in `onFlush`, not `onConfigure`: the sink reuses the same processor while the old format drains.
 - Audio offload (where processors are bypassed) is not enabled in this app; keep it that way, and note it next to the builder.
 - Reset filter and hold state in `onFlush()` (seek, track change) so there is no stale-sample burst.
 - CPU is trivial (a few ops per sample). No allocation on the audio thread.

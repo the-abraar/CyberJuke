@@ -34,7 +34,10 @@ import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlaybackException
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
@@ -372,7 +375,10 @@ class PlaybackService : MediaSessionService() {
             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
             .build()
 
-        val exo = ExoPlayer.Builder(this)
+        val builder = ExoPlayer.Builder(this)
+        // 8-bit mode, phase 1 (8bitplan.md): only a local listening build sets RETRO_LISTEN_TEST; the shipped player is untouched.
+        if (RETRO_LISTEN_TEST) builder.setRenderersFactory(retroRenderersFactory())
+        val exo = builder
             .setMediaSourceFactory(mediaSourceFactory)
             .setAudioAttributes(audioAttributes, /* handleAudioFocus = */ true)
             .setHandleAudioBecomingNoisy(true)
@@ -1256,4 +1262,18 @@ class PlaybackService : MediaSessionService() {
         /** While playing, the position is saved this often. */
         private const val POSITION_SAVE_MS = 15_000L
     }
+}
+
+/** Flip to true in a local build to hear 8-bit mode on every track (phase 1 of 8bitplan.md: decide by ear before any UI). */
+private const val RETRO_LISTEN_TEST = false
+
+// Audio offload would bypass the processor; this app does not enable it, and must not while 8-bit mode exists.
+@OptIn(UnstableApi::class)
+private fun Context.retroRenderersFactory() = object : DefaultRenderersFactory(this) {
+    override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink =
+        DefaultAudioSink.Builder(context)
+            .setAudioProcessors(arrayOf(RetroAudioProcessor().apply { enabled = true }))
+            .setEnableFloatOutput(enableFloatOutput)
+            .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+            .build()
 }
